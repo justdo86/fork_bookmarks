@@ -1,0 +1,65 @@
+name: deploy to aliyun
+on:
+  push:
+    branches:
+      - master
+env:
+  SERVER_PRIVATE_KEY: ${{ secrets.ACCESS_TOKEN }} # 服务器私钥
+  SERVER_HOST: ${{ secrets.HOST }} # 服务器IP地址
+  USER_NAME: ${{ secrets.NAME }} # 服务器用户名
+  cache-name: blog
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 切换分支
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: work around permission issue
+        run: git config --global --add safe.directory /github/workspace
+      # 使用 node:10
+      - name: use Node.js 14
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14
+      #缓存依赖
+      - name: Cache nodemodules
+        uses: actions/cache@v1
+        env:
+            cache-name: cache-node-modules
+        with:
+          # 需要缓存的文件的路径
+          path: ./node_modules 
+          # 对缓存的文件指定的唯一标识
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('./package.json') }} 
+          # 用于没有再找目标key的缓存的backup选项
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+      # npm install
+      - name: npm install and build
+        run: |
+          npm install
+          npm run build
+        env:
+          CI: true
+      # Deploy
+      - name: Deploy to Server
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.ACCESS_TOKEN }}
+          ARGS: "-avz --delete"
+          SOURCE: "./docs/.vuepress/dist/"
+          REMOTE_HOST: ${{ secrets.HOST }}
+          REMOTE_USER: ${{ secrets.NAME }}
+          TARGET:  "/www/6002"
+      # - name: Deploy aliyun
+      #   uses: easingthemes/ssh-deploy@v2.0.7
+      #   env:
+      #     SSH_PRIVATE_KEY: ${{ env.SERVER_PRIVATE_KEY }}
+      #     ARGS: "-avz --delete"
+      #     SOURCE: "./docs/.vuepress/dist/"
+      #     REMOTE_HOST: ${{ env.SERVER_HOST }}
+      #     REMOTE_USER: ${{ env.USER_NAME }}
+      #     TARGET: "/www/blog2222"
